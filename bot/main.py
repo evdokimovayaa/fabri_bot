@@ -20,7 +20,6 @@ from obabot.types import (
 )
 from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.client.session import aiohttp_session
 from dotenv import load_dotenv
 import aiohttp
 
@@ -960,10 +959,11 @@ async def main() -> None:
     if tg_session and BOT_TOKEN:
         try:
             tg_bot = bot.get_bot(BPlatform.telegram)
-            # Close default session and replace with custom one
+            # Replace bot's default session with custom one configured for proxy
             if hasattr(tg_bot, "session") and tg_bot.session:
-                await tg_bot.session.close()
-            tg_bot.session = aiohttp_session.AiohttpSession(tg_session)
+                # Don't close default session here, let aiogram manage it
+                pass
+            tg_bot.session = tg_session
             logger.info("Telegram bot configured with custom proxy session")
         except Exception as exc:
             logger.error(f"Failed to apply custom proxy session: {exc}")
