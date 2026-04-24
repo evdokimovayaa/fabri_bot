@@ -3,8 +3,6 @@ services:
     build: .
     env_file:
       - .env
-    environment:
-      - TG_PROXY=socks5://host.docker.internal:10808
     volumes:
       - ./bot/logs:/app/logs
     network_mode: host
