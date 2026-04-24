@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy webhook
-COPY webhook.py .
+COPY webhook/webhook.py .
 
 ENV WEBHOOK_PORT=9000
 

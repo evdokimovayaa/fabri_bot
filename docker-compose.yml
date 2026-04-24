@@ -4,7 +4,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./logs:/app/logs
+      - ./bot/logs:/app/logs
     networks:
       - bot-network
     restart: unless-stopped
@@ -12,7 +12,7 @@ services:
   webhook:
     build:
       context: .
-      dockerfile: Dockerfile.webhook
+      dockerfile: webhook/Dockerfile.webhook
     container_name: deploy-webhook
     restart: always
     working_dir: /app
@@ -23,7 +23,7 @@ services:
       - .env
     ports:
       - "9000:9000"
-    command: python webhook.py
+    command: python webhook/webhook.py
 
 networks:
   bot-network:

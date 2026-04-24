@@ -15,13 +15,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
-COPY requirements.txt .
+COPY bot/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project code
-COPY main.py fabry_score_weights.json .env ./
+# Copy bot code
+COPY bot/main.py bot/core.py bot/fabry_score_weights.json ./
+
+# Copy logs directory
+RUN mkdir -p logs
 
 # Run the bot
 CMD ["python", "main.py"]
