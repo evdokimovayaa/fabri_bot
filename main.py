@@ -706,7 +706,7 @@ STEPS: list[Step] = [
     Step(
         key="sms_pref",
         kind="choice",
-        text=lambda _: "Может, вы хотите получить рекомендацию от специалиста в СМС?",
+        text=lambda _: "Хотели бы вы получить рекомендацию от специалиста в СМС?",
         options=lambda _: ["Да, хочу получить рекомендацию в СМС", "Нет, не нужно"],
         condition=_should_ask_sms_pref,
     ),
