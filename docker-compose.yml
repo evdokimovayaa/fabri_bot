@@ -7,8 +7,7 @@ services:
       - TG_PROXY=socks5://host.docker.internal:10808
     volumes:
       - ./bot/logs:/app/logs
-    networks:
-      - bot-network
+    network_mode: host
     restart: unless-stopped
 
   webhook:
