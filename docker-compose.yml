@@ -1,8 +1,26 @@
 services:
+  ssh-tunnel:
+    image: alpine:latest
+    container_name: ssh_tunnel
+    command: |
+      sh -c "                                                                                                                                                                      
+      apk add --no-cache openssh-client &&                
+      ssh -D 0.0.0.0:10808 root@103.228.168.190 -N
+      "
+    ports:
+      - "10808:10808"
+    networks:
+      - bot-network
+    restart: unless-stopped
+
   bot:
     build: .
+    depends_on:
+      - ssh-tunnel
     env_file:
       - .env
+    environment:
+      - TG_PROXY=socks5://ssh-tunnel:10808
     volumes:
       - ./bot/logs:/app/logs
     networks:
@@ -24,6 +42,8 @@ services:
     ports:
       - "9000:9000"
     command: python webhook/webhook.py
+    networks:
+      - bot-network
 
 networks:
   bot-network:
