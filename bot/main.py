@@ -864,14 +864,16 @@ async def message_fallback(message) -> None:
 
 def register_handlers() -> None:
     """Register all handlers with the router. Must be called after router initialization."""
+    from aiogram.filters import StateFilter
+
     router.message(CommandStart())(cmd_start)
     router.callback_query(F.data == "hotline")(cb_hotline)
     router.callback_query(F.data.startswith("consent|"))(cb_consent)
-    router.callback_query(SurveyFSM.waiting_choice, F.data.startswith("ans|"))(cb_choice_answer)
-    router.message(SurveyFSM.waiting_choice)(wrong_input_in_choice)
-    router.message(SurveyFSM.waiting_text)(text_answer)
-    router.message(SurveyFSM.collecting_additional)(collect_additional)
-    router.callback_query(SurveyFSM.collecting_additional, F.data.startswith("collect_done|"))(cb_collect_done)
+    router.callback_query(StateFilter(SurveyFSM.waiting_choice) & F.data.startswith("ans|"))(cb_choice_answer)
+    router.message(StateFilter(SurveyFSM.waiting_choice))(wrong_input_in_choice)
+    router.message(StateFilter(SurveyFSM.waiting_text))(text_answer)
+    router.message(StateFilter(SurveyFSM.collecting_additional))(collect_additional)
+    router.callback_query(StateFilter(SurveyFSM.collecting_additional) & F.data.startswith("collect_done|"))(cb_collect_done)
     router.callback_query(F.data == "get_pdf")(cb_get_pdf)
     router.callback_query()(cb_fallback)
     router.message()(message_fallback)
