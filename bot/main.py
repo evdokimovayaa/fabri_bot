@@ -20,13 +20,8 @@ from obabot.types import (
 )
 from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.client.session.aiohttp import AiohttpSession
 from dotenv import load_dotenv
-import aiohttp
-
-try:
-    import aiohttp_socks
-except ImportError:
-    aiohttp_socks = None
 
 # Import all business logic from core.py
 from core import (
@@ -916,60 +911,25 @@ async def main() -> None:
     # Optional: Configure Telegram proxy (HTTP, SOCKS4, or SOCKS5)
     # Format: http://proxy.example.com:8080, socks5://user:pass@proxy.example.com:1080, etc.
     tg_proxy = os.getenv("TG_PROXY", "").strip()
-    tg_session = None
 
-    if tg_proxy:
-        logger.info(f"Configuring Telegram proxy: {tg_proxy}")
-        try:
-            if tg_proxy.startswith(("socks4://", "socks5://", "socks5h://")):
-                # SOCKS proxy requires aiohttp-socks
-                if aiohttp_socks:
-                    connector = aiohttp_socks.SocksConnector.from_url(tg_proxy)
-                    tg_session = aiohttp.ClientSession(
-                        connector=connector,
-                        timeout=aiohttp.ClientTimeout(total=30),
-                    )
-                    logger.info(f"Using SOCKS proxy for Telegram")
-                else:
-                    logger.warning(
-                        "SOCKS proxy requested but aiohttp-socks not installed. "
-                        "Install with: pip install aiohttp-socks"
-                    )
-            else:
-                # HTTP proxy
-                connector = aiohttp.TCPConnector()
-                tg_session = aiohttp.ClientSession(
-                    connector=connector,
-                    timeout=aiohttp.ClientTimeout(total=30),
-                    trust_env=True,  # Respect HTTP_PROXY env vars
-                )
-                logger.info(f"Using HTTP proxy for Telegram")
-        except Exception as exc:
-            logger.error(f"Failed to configure proxy: {exc}")
-            tg_session = None
-
-    # Create bot with optional custom session for Telegram
+    # Create bot
     bot, dp, router = create_bot(
         tg_token=BOT_TOKEN or None,
         max_token=MAX_BOT_TOKEN or None,
         fsm_storage=MemoryStorage(),
     )
 
-    # If custom session was created for proxy, replace Telegram bot's session
-    if tg_session and BOT_TOKEN:
+    # If proxy is configured, replace Telegram bot's session with one that uses proxy
+    if tg_proxy and BOT_TOKEN:
+        logger.info(f"Configuring Telegram proxy: {tg_proxy}")
         try:
             tg_bot = bot.get_bot(BPlatform.telegram)
-            # Replace bot's default session with custom one configured for proxy
-            if hasattr(tg_bot, "session") and tg_bot.session:
-                # Don't close default session here, let aiogram manage it
-                pass
-            tg_bot.session = tg_session
-            logger.info("Telegram bot configured with custom proxy session")
+            # AiohttpSession accepts proxy parameter directly
+            tg_bot.session = AiohttpSession(proxy=tg_proxy)
+            logger.info("Telegram bot configured with proxy session")
         except Exception as exc:
-            logger.error(f"Failed to apply custom proxy session: {exc}")
-            # Continue without proxy
-            if tg_session:
-                await tg_session.close()
+            logger.error(f"Failed to configure proxy: {exc}")
+            logger.warning("Continuing without proxy")
 
     # Register all handlers after router is initialized
     register_handlers()
