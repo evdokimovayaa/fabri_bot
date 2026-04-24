@@ -919,6 +919,9 @@ async def main() -> None:
         fsm_storage=MemoryStorage(),
     )
 
+    # Register all handlers before proxy setup (proxy triggers lazy platform load)
+    register_handlers()
+
     # If proxy is configured, replace Telegram bot's session with one that uses proxy
     if tg_proxy and BOT_TOKEN:
         logger.info(f"Configuring Telegram proxy: {tg_proxy}")
@@ -930,9 +933,6 @@ async def main() -> None:
         except Exception as exc:
             logger.error(f"Failed to configure proxy: {exc}")
             logger.warning("Continuing without proxy")
-
-    # Register all handlers after router is initialized
-    register_handlers()
 
     # Set up TelegramLogHandler only if Telegram token is available
     if BOT_TOKEN and LOG_CHAT_ID:
