@@ -607,7 +607,9 @@ async def cmd_start(message, state: FSMContext) -> None:
         "Пожалуйста, подтвердите согласие на обработку персональных данных (ФЗ-152).\n"
         "Вы можете связаться с оператором по горячей линии на любом этапе."
     )
+    logger.info("Sending welcome message with consent keyboard")
     await message.answer(welcome, reply_markup=consent_keyboard().as_markup())
+    logger.info("Welcome message sent")
 
 
 async def cb_hotline(callback, state: FSMContext) -> None:
