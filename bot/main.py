@@ -592,10 +592,9 @@ async def finish_with_confirmed_diagnosis(message, state: FSMContext) -> None:
 
 
 # =========================
-# Handlers
+# Handlers (registered in register_handlers())
 # =========================
 
-@router.message(CommandStart())
 async def cmd_start(message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(SurveyFSM.waiting_consent)
@@ -610,14 +609,12 @@ async def cmd_start(message, state: FSMContext) -> None:
     await message.answer(welcome, reply_markup=consent_keyboard().as_markup())
 
 
-@router.callback_query(F.data == "hotline")
 async def cb_hotline(callback, state: FSMContext) -> None:
     sent = await callback.message.answer(f"Позвоните нам по номеру: {HOTLINE_PHONE}")
     await _track_msg(state, sent.message_id)
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("consent|"))
 async def cb_consent(callback, state: FSMContext) -> None:
     if callback.data == "consent|no":
         await callback.answer()
@@ -651,7 +648,6 @@ async def cb_consent(callback, state: FSMContext) -> None:
     await send_step(callback.message, state)
 
 
-@router.callback_query(SurveyFSM.waiting_choice, F.data.startswith("ans|"))
 async def cb_choice_answer(callback, state: FSMContext) -> None:
     data = await state.get_data()
     parts = (callback.data or "").split("|")
@@ -699,7 +695,6 @@ async def cb_choice_answer(callback, state: FSMContext) -> None:
     await send_step(callback.message, state)
 
 
-@router.message(SurveyFSM.waiting_choice)
 async def wrong_input_in_choice(message, state: FSMContext) -> None:
     data = await state.get_data()
     idx = data.get("step_index", 0)
@@ -712,7 +707,6 @@ async def wrong_input_in_choice(message, state: FSMContext) -> None:
     await _track_msg(state, message.message_id, sent.message_id)
 
 
-@router.message(SurveyFSM.waiting_text)
 async def text_answer(message, state: FSMContext) -> None:
     data = await state.get_data()
     idx = data.get("step_index", 0)
@@ -768,7 +762,6 @@ async def text_answer(message, state: FSMContext) -> None:
     await send_step(message, state)
 
 
-@router.message(SurveyFSM.collecting_additional)
 async def collect_additional(message, state: FSMContext) -> None:
     data = await state.get_data()
     idx = data.get("step_index", 0)
@@ -808,7 +801,6 @@ async def collect_additional(message, state: FSMContext) -> None:
     await _track_msg(state, message.message_id, sent.message_id)
 
 
-@router.callback_query(SurveyFSM.collecting_additional, F.data.startswith("collect_done|"))
 async def cb_collect_done(callback, state: FSMContext) -> None:
     data = await state.get_data()
     parts = (callback.data or "").split("|")
@@ -839,7 +831,6 @@ async def cb_collect_done(callback, state: FSMContext) -> None:
     await send_step(callback.message, state)
 
 
-@router.callback_query(F.data == "get_pdf")
 async def cb_get_pdf(callback) -> None:
     chat_id = callback.message.chat.id
     data = _pdf_data_cache.get(chat_id)
@@ -859,14 +850,31 @@ async def cb_get_pdf(callback) -> None:
         await callback.message.answer("Произошла ошибка при генерации PDF. Попробуйте позже.")
 
 
-@router.callback_query()
 async def cb_fallback(callback) -> None:
     await callback.answer("Эта кнопка больше не актуальна.", show_alert=False)
 
 
-@router.message()
 async def message_fallback(message) -> None:
     await message.answer("Чтобы начать анкетирование, отправьте команду /start")
+
+
+# =========================
+# Register Handlers
+# =========================
+
+def register_handlers() -> None:
+    """Register all handlers with the router. Must be called after router initialization."""
+    router.message(CommandStart())(cmd_start)
+    router.callback_query(F.data == "hotline")(cb_hotline)
+    router.callback_query(F.data.startswith("consent|"))(cb_consent)
+    router.callback_query(SurveyFSM.waiting_choice, F.data.startswith("ans|"))(cb_choice_answer)
+    router.message(SurveyFSM.waiting_choice)(wrong_input_in_choice)
+    router.message(SurveyFSM.waiting_text)(text_answer)
+    router.message(SurveyFSM.collecting_additional)(collect_additional)
+    router.callback_query(SurveyFSM.collecting_additional, F.data.startswith("collect_done|"))(cb_collect_done)
+    router.callback_query(F.data == "get_pdf")(cb_get_pdf)
+    router.callback_query()(cb_fallback)
+    router.message()(message_fallback)
 
 
 # =========================
@@ -881,6 +889,9 @@ async def main() -> None:
         max_token=MAX_BOT_TOKEN or None,
         fsm_storage=MemoryStorage()
     )
+
+    # Register all handlers after router is initialized
+    register_handlers()
 
     # Set up TelegramLogHandler only if Telegram token is available
     if BOT_TOKEN and LOG_CHAT_ID:
