@@ -596,6 +596,7 @@ async def finish_with_confirmed_diagnosis(message, state: FSMContext) -> None:
 # =========================
 
 async def cmd_start(message, state: FSMContext) -> None:
+    logger.info(f"cmd_start called from {message.platform if hasattr(message, 'platform') else 'unknown'}")
     await state.clear()
     await state.set_state(SurveyFSM.waiting_consent)
 
