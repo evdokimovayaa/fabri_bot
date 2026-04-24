@@ -20,7 +20,14 @@ from obabot.types import (
 )
 from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.client.session import aiohttp_session
 from dotenv import load_dotenv
+import aiohttp
+
+try:
+    import aiohttp_socks
+except ImportError:
+    aiohttp_socks = None
 
 # Import all business logic from core.py
 from core import (
@@ -189,11 +196,13 @@ def hotline_keyboard_row(builder: InlineKeyboardBuilder) -> None:
 
 
 def consent_keyboard() -> InlineKeyboardBuilder:
+    logger.debug("Building consent keyboard")
     kb = InlineKeyboardBuilder()
     kb.button(text="✅ Я согласен на обработку данных", callback_data="consent|yes")
     kb.button(text="❌ Я не согласен", callback_data="consent|no")
     kb.adjust(1)
     hotline_keyboard_row(kb)
+    logger.debug("Consent keyboard built successfully")
     return kb
 
 
@@ -237,11 +246,27 @@ async def get_data(state: FSMContext) -> dict[str, Any]:
     return await state.get_data()
 
 
-async def _track_msg(state: FSMContext, *msg_ids: int) -> None:
-    """Add message IDs to the deletable list."""
+def _extract_message_id(msg_obj: Any) -> Optional[int]:
+    """Extract message_id from Telegram Message object or Max dict response."""
+    if msg_obj is None:
+        return None
+    # Telegram Message object
+    if hasattr(msg_obj, 'message_id'):
+        return msg_obj.message_id
+    # Max dict response
+    if isinstance(msg_obj, dict):
+        return msg_obj.get('message_id') or msg_obj.get('mid')
+    return None
+
+
+async def _track_msg(state: FSMContext, *msg_objs: Any) -> None:
+    """Add message IDs to the deletable list. Works with both Telegram Messages and Max dicts."""
     data = await state.get_data()
     ids = list(data.get("_del_ids", []))
-    ids.extend(msg_ids)
+    for msg_obj in msg_objs:
+        msg_id = _extract_message_id(msg_obj)
+        if msg_id:
+            ids.append(msg_id)
     await state.update_data(_del_ids=ids)
 
 
@@ -614,7 +639,7 @@ async def cmd_start(message, state: FSMContext) -> None:
 
 async def cb_hotline(callback, state: FSMContext) -> None:
     sent = await callback.message.answer(f"Позвоните нам по номеру: {HOTLINE_PHONE}")
-    await _track_msg(state, sent.message_id)
+    await _track_msg(state, sent)
     await callback.answer()
 
 
@@ -647,7 +672,7 @@ async def cb_consent(callback, state: FSMContext) -> None:
     await callback.message.answer(
         f"📞 На любом этапе анкетирования вы можете позвонить на горячую линию: {HOTLINE_PHONE}"
     )
-    await _track_msg(state, thanks.message_id)
+    await _track_msg(state, thanks)
     await send_step(callback.message, state)
 
 
@@ -707,7 +732,7 @@ async def wrong_input_in_choice(message, state: FSMContext) -> None:
         "Пожалуйста, выберите вариант из предложенных кнопок ниже. 👇",
         reply_markup=choice_keyboard(idx, opts).as_markup(),
     )
-    await _track_msg(state, message.message_id, sent.message_id)
+    await _track_msg(state, message, sent)
 
 
 async def text_answer(message, state: FSMContext) -> None:
@@ -729,18 +754,18 @@ async def text_answer(message, state: FSMContext) -> None:
         else:
             hint = "Пожалуйста, отправьте ответ текстом."
         sent = await message.answer(hint, reply_markup=text_keyboard().as_markup())
-        await _track_msg(state, message.message_id, sent.message_id)
+        await _track_msg(state, message, sent)
         return
 
     if step.validator:
         ok, err = step.validator(raw, data)
         if not ok:
             sent = await message.answer(err, reply_markup=text_keyboard().as_markup())
-            await _track_msg(state, message.message_id, sent.message_id)
+            await _track_msg(state, message, sent)
             return
 
     # Track user message so it gets deleted with the next step
-    await _track_msg(state, message.message_id)
+    await _track_msg(state, message)
 
     answers = dict(data.get("answers", {}))
     answers[step.key] = raw
@@ -753,7 +778,7 @@ async def text_answer(message, state: FSMContext) -> None:
     # Remove reply keyboard if it was shown (phone step)
     if step.key == "phone":
         rm_msg = await message.answer("✓", reply_markup=ReplyKeyboardRemove())
-        await _track_msg(state, rm_msg.message_id)
+        await _track_msg(state, rm_msg)
 
     new_data = await state.get_data()
     nxt = next_step_index(idx + 1, new_data)
@@ -801,7 +826,7 @@ async def collect_additional(message, state: FSMContext) -> None:
         "Добавлено. Можете отправить еще сообщения или нажать «✅ Продолжить».",
         reply_markup=collect_keyboard(idx).as_markup(),
     )
-    await _track_msg(state, message.message_id, sent.message_id)
+    await _track_msg(state, message, sent)
 
 
 async def cb_collect_done(callback, state: FSMContext) -> None:
@@ -889,11 +914,62 @@ def register_handlers() -> None:
 async def main() -> None:
     global bot, dp, router
 
+    # Optional: Configure Telegram proxy (HTTP, SOCKS4, or SOCKS5)
+    # Format: http://proxy.example.com:8080, socks5://user:pass@proxy.example.com:1080, etc.
+    tg_proxy = os.getenv("TG_PROXY", "").strip()
+    tg_session = None
+
+    if tg_proxy:
+        logger.info(f"Configuring Telegram proxy: {tg_proxy}")
+        try:
+            if tg_proxy.startswith(("socks4://", "socks5://", "socks5h://")):
+                # SOCKS proxy requires aiohttp-socks
+                if aiohttp_socks:
+                    connector = aiohttp_socks.SocksConnector.from_url(tg_proxy)
+                    tg_session = aiohttp.ClientSession(
+                        connector=connector,
+                        timeout=aiohttp.ClientTimeout(total=30),
+                    )
+                    logger.info(f"Using SOCKS proxy for Telegram")
+                else:
+                    logger.warning(
+                        "SOCKS proxy requested but aiohttp-socks not installed. "
+                        "Install with: pip install aiohttp-socks"
+                    )
+            else:
+                # HTTP proxy
+                connector = aiohttp.TCPConnector()
+                tg_session = aiohttp.ClientSession(
+                    connector=connector,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                    trust_env=True,  # Respect HTTP_PROXY env vars
+                )
+                logger.info(f"Using HTTP proxy for Telegram")
+        except Exception as exc:
+            logger.error(f"Failed to configure proxy: {exc}")
+            tg_session = None
+
+    # Create bot with optional custom session for Telegram
     bot, dp, router = create_bot(
         tg_token=BOT_TOKEN or None,
         max_token=MAX_BOT_TOKEN or None,
-        fsm_storage=MemoryStorage()
+        fsm_storage=MemoryStorage(),
     )
+
+    # If custom session was created for proxy, replace Telegram bot's session
+    if tg_session and BOT_TOKEN:
+        try:
+            tg_bot = bot.get_bot(BPlatform.telegram)
+            # Close default session and replace with custom one
+            if hasattr(tg_bot, "session") and tg_bot.session:
+                await tg_bot.session.close()
+            tg_bot.session = aiohttp_session.AiohttpSession(tg_session)
+            logger.info("Telegram bot configured with custom proxy session")
+        except Exception as exc:
+            logger.error(f"Failed to apply custom proxy session: {exc}")
+            # Continue without proxy
+            if tg_session:
+                await tg_session.close()
 
     # Register all handlers after router is initialized
     register_handlers()

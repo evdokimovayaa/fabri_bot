@@ -1,3 +1,5 @@
 obabot>=0.2.0
 python-dotenv==1.0.1
 fpdf2==2.8.3
+# Optional: for SOCKS5 proxy support
+# aiohttp-socks>=0.8.4
