@@ -877,6 +877,10 @@ async def cb_fallback(callback) -> None:
 
 
 async def message_fallback(message) -> None:
+    # Only reply in private chats, ignore group messages
+    chat_type = getattr(message.chat, "type", "private")
+    if chat_type != "private":
+        return
     await message.answer("Чтобы начать анкетирование, отправьте команду /start")
 
 
@@ -939,6 +943,7 @@ async def main() -> None:
         try:
             tg_bot = bot.get_bot(BPlatform.telegram)
             telegram_log_handler = TelegramLogHandler(tg_bot, LOG_CHAT_ID)
+            telegram_log_handler.setLevel(logging.WARNING)
             telegram_log_handler.setFormatter(
                 logging.Formatter("[Лог %(levelname)s] %(asctime)s\n%(message)s")
             )
