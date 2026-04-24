@@ -10,7 +10,9 @@ services:
     restart: unless-stopped
 
   webhook:
-    image: python:3.11-slim
+    build:
+      context: .
+      dockerfile: Dockerfile.webhook
     container_name: deploy-webhook
     restart: always
     working_dir: /app
