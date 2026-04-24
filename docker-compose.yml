@@ -1,5 +1,5 @@
 services:
-  telegram-bot:
+  bot:
     build: .
     env_file:
       - .env
@@ -9,27 +9,19 @@ services:
       - bot-network
     restart: unless-stopped
 
-  max-bot:
-      build:
-        context: .
-        dockerfile: Dockerfile.max
-      env_file:
-        - .env
-      restart: unless-stopped
-
   webhook:
-      image: python:3.11-slim
-      container_name: deploy-webhook
-      restart: always
-      working_dir: /app
-      volumes:
-        - .:/app
-        - /var/run/docker.sock:/var/run/docker.sock
-      env_file:
-        - .env
-      ports:
-        - "9000:9000"
-      command: python webhook.py
+    image: python:3.11-slim
+    container_name: deploy-webhook
+    restart: always
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
+    ports:
+      - "9000:9000"
+    command: python webhook.py
 
 networks:
   bot-network:
