@@ -408,7 +408,7 @@ async def send_step(message, state: FSMContext) -> None:
     track_ids.append(sent.message_id)
 
     # For the phone step, show reply keyboard only on Telegram (Max doesn't support it)
-    if step.key == "phone" and not message.is_max():
+    if step.key == "phone" and get_current_platform() != BPlatform.max:
         share_msg = await message.answer(
             "Или нажмите кнопку ниже, чтобы поделиться номером:",
             reply_markup=phone_reply_keyboard(),
@@ -735,7 +735,7 @@ async def text_answer(message, state: FSMContext) -> None:
     step = step_by_index(idx)
 
     # Handle shared contact for the phone step (only on Telegram, Max doesn't support it)
-    if step.key == "phone" and not message.is_max() and message.contact:
+    if step.key == "phone" and get_current_platform() != BPlatform.max and message.contact:
         phone = message.contact.phone_number
         if not phone.startswith("+"):
             phone = f"+{phone}"
@@ -895,11 +895,11 @@ def register_handlers() -> None:
     router.message(CommandStart())(cmd_start)
     router.callback_query(F.data == "hotline")(cb_hotline)
     router.callback_query(F.data.startswith("consent|"))(cb_consent)
-    router.callback_query(StateFilter(SurveyFSM.waiting_choice) & F.data.startswith("ans|"))(cb_choice_answer)
+    router.callback_query(StateFilter(SurveyFSM.waiting_choice), F.data.startswith("ans|"))(cb_choice_answer)
     router.message(StateFilter(SurveyFSM.waiting_choice))(wrong_input_in_choice)
     router.message(StateFilter(SurveyFSM.waiting_text))(text_answer)
     router.message(StateFilter(SurveyFSM.collecting_additional))(collect_additional)
-    router.callback_query(StateFilter(SurveyFSM.collecting_additional) & F.data.startswith("collect_done|"))(cb_collect_done)
+    router.callback_query(StateFilter(SurveyFSM.collecting_additional), F.data.startswith("collect_done|"))(cb_collect_done)
     router.callback_query(F.data == "get_pdf")(cb_get_pdf)
     router.callback_query()(cb_fallback)
     router.message()(message_fallback)
